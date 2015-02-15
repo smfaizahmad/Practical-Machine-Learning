@@ -1,0 +1,99 @@
+---
+title: "PML Project Writeup"
+output: html_document
+---
+
+## Executive Summary 
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Data 
+
+The training data for this project are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The test data are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+## Acknowledgement
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. Sharing of this data is hereby acknowledged.
+Ideal way to run the analysis is on online data. However considering data size, offline analysis has been performed. 
+For online data reading following R script can be used. However, this method is not used in current project. 
+
+##Analysis performed
+
+Required libraries are loaded. Note activation of multiple cores of the processor to run the analysis faster. 
+
+```{r message = FALSE}
+library(Hmisc)
+library(caret)
+library(knitr)
+library(randomForest)
+library(foreach)
+set.seed(1234)
+setwd("E:/DataSciences/8 Machine Learning/Project")
+```
+```{r warning=FALSE}
+training_data <- read.csv("pml-training.csv", na.strings=c("#DIV/0!") )
+testing_data <- read.csv("pml-testing.csv", na.strings=c("#DIV/0!") )
+```
+Some values contain "DIV/0", they have been relaced witth NA values. 
+```{r warning=FALSE}
+for(i in c(8:ncol(training_data)-1)) {training_data[,i] = as.numeric(as.character(training_data[,i]))}
+
+for(i in c(8:ncol(testing_data)-1)) {testing_data[,i] = as.numeric(as.character(testing_data[,i]))}
+```
+
+## Finding feature set
+
+```{r}
+feature_set <- colnames(training_data[colSums(is.na(training_data)) == 0])[-(1:7)]
+model_data <- training_data[feature_set]
+feature_set
+idx <- createDataPartition(y=model_data$classe, p=0.75, list=FALSE )
+training <- model_data[idx,]
+testing <- model_data[-idx,]
+```
+
+## Building Random forests (parallel processing used)
+```{r}
+x <- training[-ncol(training)]
+y <- training$classe
+rf <- foreach(ntree=rep(150, 6), .combine=randomForest::combine, .packages='randomForest') %dopar% {
+randomForest(x, y, ntree=ntree) 
+}
+```
+
+## Generating Error Reports
+
+```{r}
+predictions1 <- predict(rf, newdata=training)
+confusionMatrix(predictions1,training$classe)
+predictions2 <- predict(rf, newdata=testing)
+confusionMatrix(predictions2,testing$classe)
+```
+
+## Conclusions 
+
+A quick review of confusion matrix shows the model to be very accurate. 
+
+
+## Result Submission
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+x <- testing_data
+x <- x[feature_set[feature_set!='classe']]
+answers <- predict(rf, newdata=x)
+
+answers
+
+pml_write_files(answers)
+
+```
